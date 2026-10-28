@@ -1,16 +1,18 @@
 """
-Calculadora Simples em Python com suporte às quatro operações básicas:
+Calculadora Simples em Python com suporte às quatro operações básicas e porcentagem:
 - Soma (+)
 - Subtração (-)
 - Multiplicação (*)
 - Divisão (/)
+- Porcentagem (%)
 
 Com validação segura de sintaxe via AST (sem eval arbitrário)
-e tratamento específico para divisão por zero e erros de sintaxe.
+e tratamento específico para divisão por zero, erros de sintaxe e regras de porcentagem comercial.
 """
 
 import ast
 import operator
+import re
 import sys
 from typing import Union, Tuple
 
@@ -61,7 +63,7 @@ def _eval_node(node: ast.AST) -> Union[int, float]:
 
 def calcular(expressao: str) -> Tuple[bool, Union[int, float, str]]:
     """
-    Avalia a expressão matemática informada pelo usuário.
+    Avalia a expressão matemática informada pelo usuário com suporte a porcentagem.
     Retorna uma tupla (sucesso: bool, resultado_ou_erro: Union[int, float, str]).
     """
     if not expressao or not expressao.strip():
@@ -76,22 +78,49 @@ def calcular(expressao: str) -> Tuple[bool, Union[int, float, str]]:
         .replace(",", ".")
     )
     
-    # Validação de operadores consecutivos ou sintaxe inválida de calculadora
-    import re
-    # Operadores duplicados ou consecutivos como ++, --, +*, *+, //, **, etc.
-    if re.search(r'[\+\-\*/]{2,}', expr_limpa.replace(" ", "")):
+    expr_sem_espacos = expr_limpa.replace(" ", "")
+
+    # Validação de operadores consecutivos inválidos (ex: ++, --, +*, //, **, %%, etc.)
+    if re.search(r'[\+\-\*/]{2,}', expr_sem_espacos) or re.search(r'%{2,}', expr_sem_espacos):
         return False, "Expressão inválida: operadores consecutivos não permitidos"
     
-    # Operador no início (exceto unário - ou +) ou operador no fim
-    expr_sem_espacos = expr_limpa.replace(" ", "")
-    if re.search(r'^[*/]', expr_sem_espacos):
-        return False, "Expressão inválida: não pode iniciar com multiplicação ou divisão"
+    # Operador binário seguido imediatamente de porcentagem (+%, -%, *%, /%)
+    if re.search(r'[\+\-\*/]%', expr_sem_espacos):
+        return False, "Expressão inválida: operador seguido de porcentagem não permitido"
+    
+    # Não pode iniciar com operador de multiplicação, divisão ou porcentagem
+    if re.search(r'^[*/%]', expr_sem_espacos):
+        return False, "Expressão inválida: não pode iniciar com multiplicação, divisão ou porcentagem"
+    
+    # Não pode terminar com operador aritmético pendente (+, -, *, /)
     if re.search(r'[\+\-\*/]$', expr_sem_espacos):
         return False, "Expressão incompleta: operador pendente no final"
+
+    # Validação de caracteres matemáticos permitidos
+    if not re.match(r'^[0-9\.\+\-\*/\(\)\s%]+$', expr_limpa):
+        return False, "Expressão inválida: contém caracteres não numéricos"
+    
+    # Transformação de porcentagem para sintaxe aritmética interpretável pela AST
+    expr_ast = expr_limpa
+
+    # 1. Acréscimo e desconto percentual comercial: A + B% -> (A + (A * ((B) / 100))) e A - B% -> (A - (A * ((B) / 100)))
+    # Garante que não combine com outro % à esquerda
+    expr_ast = re.sub(
+        r'(\b\d+(?:\.\d+)?|\))\s*([\+\-])\s*(\b\d+(?:\.\d+)?|\([^)]+\))%',
+        r'(\1 \2 (\1 * ((\3) / 100)))',
+        expr_ast
+    )
+
+    # 2. Porcentagem direta e multiplicativa/divisiva: X% -> ((X) / 100)
+    expr_ast = re.sub(
+        r'(\b\d+(?:\.\d+)?|\([^)]+\))%',
+        r'((\1) / 100)',
+        expr_ast
+    )
     
     try:
         # Analisa a expressão como árvore sintática
-        parsed = ast.parse(expr_limpa, mode='eval')
+        parsed = ast.parse(expr_ast, mode='eval')
         resultado = _eval_node(parsed.body)
         
         # Formata resultado (se for número inteiro exato, como 4.0 -> 4)
@@ -112,11 +141,11 @@ def calcular(expressao: str) -> Tuple[bool, Union[int, float, str]]:
 
 def executar_cli():
     """Modo interativo via linha de comando."""
-    print("=" * 45)
-    print(" Calculadora Python - Operações Básicas (+, -, *, /)")
-    print(" Exemplos de entrada: '5+7', '10*2', '20/4', '15-8'")
+    print("=" * 50)
+    print(" Calculadora Python v2.0 - (+, -, *, /, %)")
+    print(" Exemplos: '5+7', '10*2', '100+10%', '200-15%', '50%'")
     print(" Digite 'sair' ou pressione Ctrl+C para encerrar.")
-    print("=" * 45)
+    print("=" * 50)
     
     while True:
         try:
@@ -136,7 +165,7 @@ def executar_cli():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        # Execução direta com argumento ex: python3 calculator.py "5+7"
+        # Execução direta com argumento ex: python3 calculator.py "100+10%"
         arg_expr = " ".join(sys.argv[1:])
         sucesso, res = calcular(arg_expr)
         if sucesso:

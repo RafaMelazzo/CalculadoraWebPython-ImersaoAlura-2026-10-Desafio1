@@ -35,8 +35,14 @@ const CRITERIOS_DE_TESTE = [
   { label: '10 / 0', expr: '10/0', expected: 'Erro (divisão por zero)', tag: 'Divisão por Zero' },
   { label: '3.5 + 4.2', expr: '3.5+4.2', expected: '7.7', tag: 'Decimais' },
   { label: '5 - 12', expr: '5-12', expected: '-7', tag: 'Negativos' },
+  { label: '50%', expr: '50%', expected: '0.5', tag: 'Porcentagem' },
+  { label: '200 * 10%', expr: '200*10%', expected: '20', tag: 'Porcentagem' },
+  { label: '100 + 10%', expr: '100+10%', expected: '110', tag: 'Acréscimo %' },
+  { label: '200 - 15%', expr: '200-15%', expected: '170', tag: 'Desconto %' },
   { label: '5++2', expr: '5++2', expected: 'Erro de sintaxe', tag: 'Operador Duplicado' },
+  { label: '50%%', expr: '50%%', expected: 'Erro de sintaxe', tag: 'Porcentagem Duplicada' },
   { label: '*9', expr: '*9', expected: 'Erro de sintaxe', tag: 'Operador Inicial' },
+  { label: '%10', expr: '%10', expected: 'Erro de sintaxe', tag: 'Porcentagem Inicial' },
 ];
 
 export default function App() {
@@ -45,9 +51,11 @@ export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [showHistory, setShowHistory] = useState<boolean>(false);
+  
+  // Na v2: Histórico inicia ABERTO e Critérios de Teste inicia FECHADO
+  const [showHistory, setShowHistory] = useState<boolean>(true);
   const [showPythonCode, setShowPythonCode] = useState<boolean>(false);
-  const [showTestPanel, setShowTestPanel] = useState<boolean>(true);
+  const [showTestPanel, setShowTestPanel] = useState<boolean>(false);
   const [justCalculated, setJustCalculated] = useState<boolean>(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,8 +120,8 @@ export default function App() {
       // Se acabou de calcular:
       if (justCalculated) {
         setJustCalculated(false);
-        // Se for operador (+, -, *, /), encadeia com o resultado anterior
-        if (['+', '-', '*', '/'].includes(char) && lastCalculation?.success && lastCalculation.result !== undefined) {
+        // Se for operador (+, -, *, /, %), encadeia com o resultado anterior
+        if (['+', '-', '*', '/', '%'].includes(char) && lastCalculation?.success && lastCalculation.result !== undefined) {
           return `${lastCalculation.result}${char}`;
         }
         // Se for número ou outro valor, inicia nova expressão
@@ -122,6 +130,11 @@ export default function App() {
 
       // Evita repetição de ponto decimal consecutivo
       if (char === '.' && prev.endsWith('.')) {
+        return prev;
+      }
+
+      // Evita repetição de % consecutivo
+      if (char === '%' && prev.endsWith('%')) {
         return prev;
       }
 
@@ -179,7 +192,7 @@ export default function App() {
     handleCalculate(testExpr);
   };
 
-  // Suporte a atalhos do teclado físico (conforme instrução do usuário)
+  // Suporte a atalhos do teclado físico
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Se a tecla pressionada for Escape -> ZERAR a tela e o estado interno
@@ -193,8 +206,6 @@ export default function App() {
 
       // Se a tecla for Backspace -> CORRIGIR a entrada (apagar último caractere)
       if (e.key === 'Backspace') {
-        // Se o foco já estiver no input nativo, o evento padrão do input apagará.
-        // Se o foco estiver fora do input, chamamos handleBackspace explicitamente.
         if (document.activeElement !== inputRef.current) {
           e.preventDefault();
           setActiveKey('Backspace');
@@ -216,8 +227,8 @@ export default function App() {
         return;
       }
 
-      // Números e operadores básicos
-      const validChars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-', '*', '/', '.', ',', '(', ')'];
+      // Números e operadores básicos (+, -, *, /, %, parênteses, vírgula e ponto)
+      const validChars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-', '*', '/', '%', '.', ',', '(', ')'];
       if (validChars.includes(e.key)) {
         setActiveKey(e.key);
         setTimeout(() => setActiveKey(null), 150);
@@ -249,13 +260,13 @@ export default function App() {
                 Calculadora Web
               </h1>
               <p className="text-xs text-slate-400 mt-1">
-                Quatro operações básicas com validação estrita e engine Python
+                Quatro operações básicas e porcentagem com validação estrita e engine Python
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Alternar painel de testes */}
+            {/* Alternar painel de testes (inicia fechado) */}
             <button
               type="button"
               onClick={() => setShowTestPanel((v) => !v)}
@@ -270,7 +281,7 @@ export default function App() {
               <span className="hidden sm:inline">Critérios de Teste</span>
             </button>
 
-            {/* Alternar Histórico */}
+            {/* Alternar Histórico (inicia aberto) */}
             <button
               type="button"
               onClick={() => setShowHistory((v) => !v)}
@@ -279,7 +290,7 @@ export default function App() {
                   ? 'bg-slate-800 text-slate-200 border-slate-700'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
-              title="Exibir histórico de cálculos"
+              title="Exibir ou ocultar histórico de cálculos"
             >
               <History className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Histórico</span>
@@ -340,7 +351,7 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Campo de Entrada Direta de Texto (Requisito RF01) */}
+                {/* Campo de Entrada Direta de Texto */}
                 <div className="relative flex items-center">
                   <input
                     ref={inputRef}
@@ -351,7 +362,7 @@ export default function App() {
                       setJustCalculated(false);
                       setLastCalculation(null);
                     }}
-                    placeholder="Digite ex: 5+7 ou 10*2"
+                    placeholder="Digite ex: 5+7 ou 100+10%"
                     aria-label="Expressão matemática"
                     className="w-full bg-transparent text-right font-mono text-2xl sm:text-3xl font-semibold text-slate-100 placeholder:text-slate-600 focus:outline-none tracking-tight"
                     autoFocus
@@ -385,198 +396,216 @@ export default function App() {
               </div>
 
               {/* Teclado da Calculadora */}
-              <div className="grid grid-cols-4 gap-2.5 sm:gap-3">
-                {/* Linha 1: Limpar (AC), Backspace (⌫), Parênteses */}
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className={`py-3.5 rounded-xl font-mono text-sm font-semibold transition-all flex flex-col items-center justify-center border ${
-                    activeKey === 'Escape'
-                      ? 'bg-rose-500 text-white scale-95 border-rose-400'
-                      : 'bg-rose-950/30 text-rose-300 border-rose-900/40 hover:bg-rose-900/40 hover:text-rose-100 active:scale-95'
-                  }`}
-                  title="Zerar tela e estado interno (Atalho: tecla física Esc)"
-                >
-                  <span className="text-sm font-semibold">AC</span>
-                  <span className="text-[9px] text-rose-400/80 font-normal mt-0.5">Esc</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleBackspace}
-                  className={`py-3.5 rounded-xl font-mono text-sm font-semibold transition-all flex flex-col items-center justify-center border ${
-                    activeKey === 'Backspace'
-                      ? 'bg-slate-700 text-white scale-95 border-slate-600'
-                      : 'bg-slate-800/80 text-slate-200 border-slate-700/60 hover:bg-slate-750 hover:text-white active:scale-95'
-                  }`}
-                  title="Apagar último caractere (Atalho: tecla física Backspace)"
-                >
-                  <span className="text-sm font-semibold">⌫</span>
-                  <span className="text-[9px] text-slate-400 font-normal mt-0.5">Backspace</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleInput('(')}
-                  className={`py-3.5 rounded-xl font-mono text-base font-medium transition-all border ${
-                    activeKey === '('
-                      ? 'bg-slate-700 text-white scale-95 border-slate-600'
-                      : 'bg-slate-800/50 text-slate-300 border-slate-800 hover:bg-slate-800 active:scale-95'
-                  }`}
-                >
-                  (
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleInput(')')}
-                  className={`py-3.5 rounded-xl font-mono text-base font-medium transition-all border ${
-                    activeKey === ')'
-                      ? 'bg-slate-700 text-white scale-95 border-slate-600'
-                      : 'bg-slate-800/50 text-slate-300 border-slate-800 hover:bg-slate-800 active:scale-95'
-                  }`}
-                >
-                  )
-                </button>
-
-                {/* Linha 2: 7, 8, 9, Divisão (/) */}
-                {['7', '8', '9'].map((digit) => (
+              <div className="space-y-2.5 sm:space-y-3">
+                {/* Linha Superior de Funções Utilitárias: AC, Backspace, Porcentagem (%), Parênteses */}
+                <div className="grid grid-cols-5 gap-2 sm:gap-2.5">
                   <button
-                    key={digit}
                     type="button"
-                    onClick={() => handleInput(digit)}
+                    onClick={handleClear}
+                    className={`py-3 rounded-xl font-mono text-xs sm:text-sm font-semibold transition-all flex flex-col items-center justify-center border ${
+                      activeKey === 'Escape'
+                        ? 'bg-rose-500 text-white scale-95 border-rose-400'
+                        : 'bg-rose-950/30 text-rose-300 border-rose-900/40 hover:bg-rose-900/40 hover:text-rose-100 active:scale-95'
+                    }`}
+                    title="Zerar tela e estado interno (Atalho: tecla física Esc)"
+                  >
+                    <span className="font-semibold">AC</span>
+                    <span className="text-[9px] text-rose-400/80 font-normal">Esc</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleBackspace}
+                    className={`py-3 rounded-xl font-mono text-xs sm:text-sm font-semibold transition-all flex flex-col items-center justify-center border ${
+                      activeKey === 'Backspace'
+                        ? 'bg-slate-700 text-white scale-95 border-slate-600'
+                        : 'bg-slate-800/80 text-slate-200 border-slate-700/60 hover:bg-slate-750 hover:text-white active:scale-95'
+                    }`}
+                    title="Apagar último caractere (Atalho: tecla física Backspace)"
+                  >
+                    <span className="font-semibold">⌫</span>
+                    <span className="text-[9px] text-slate-400 font-normal">⌫</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleInput('%')}
+                    className={`py-3 rounded-xl font-mono text-base font-semibold transition-all flex items-center justify-center border ${
+                      activeKey === '%'
+                        ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
+                    }`}
+                    title="Porcentagem (%) - Atalho: Shift+5 ou %"
+                  >
+                    %
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleInput('(')}
+                    className={`py-3 rounded-xl font-mono text-base font-medium transition-all border ${
+                      activeKey === '('
+                        ? 'bg-slate-700 text-white scale-95 border-slate-600'
+                        : 'bg-slate-800/50 text-slate-300 border-slate-800 hover:bg-slate-800 active:scale-95'
+                    }`}
+                  >
+                    (
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleInput(')')}
+                    className={`py-3 rounded-xl font-mono text-base font-medium transition-all border ${
+                      activeKey === ')'
+                        ? 'bg-slate-700 text-white scale-95 border-slate-600'
+                        : 'bg-slate-800/50 text-slate-300 border-slate-800 hover:bg-slate-800 active:scale-95'
+                    }`}
+                  >
+                    )
+                  </button>
+                </div>
+
+                {/* Grade Principal 4x4 */}
+                <div className="grid grid-cols-4 gap-2.5 sm:gap-3">
+                  {/* Linha 1: 7, 8, 9, Divisão (/) */}
+                  {['7', '8', '9'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleInput(digit)}
+                      className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
+                        activeKey === digit
+                          ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                          : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
+                      }`}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => handleInput('/')}
                     className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                      activeKey === digit
+                      activeKey === '/'
+                        ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
+                    }`}
+                    title="Divisão (/)"
+                  >
+                    ÷
+                  </button>
+
+                  {/* Linha 2: 4, 5, 6, Multiplicação (*) */}
+                  {['4', '5', '6'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleInput(digit)}
+                      className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
+                        activeKey === digit
+                          ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                          : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
+                      }`}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => handleInput('*')}
+                    className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
+                      activeKey === '*'
+                        ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
+                    }`}
+                    title="Multiplicação (*)"
+                  >
+                    ×
+                  </button>
+
+                  {/* Linha 3: 1, 2, 3, Subtração (-) */}
+                  {['1', '2', '3'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleInput(digit)}
+                      className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
+                        activeKey === digit
+                          ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                          : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
+                      }`}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => handleInput('-')}
+                    className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
+                      activeKey === '-'
+                        ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
+                    }`}
+                    title="Subtração (-)"
+                  >
+                    −
+                  </button>
+
+                  {/* Linha 4: 0, Ponto (.), Igualdade (=), Soma (+) */}
+                  <button
+                    type="button"
+                    onClick={() => handleInput('0')}
+                    className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
+                      activeKey === '0'
                         ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
                         : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
                     }`}
                   >
-                    {digit}
+                    0
                   </button>
-                ))}
 
-                <button
-                  type="button"
-                  onClick={() => handleInput('/')}
-                  className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                    activeKey === '/'
-                      ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
-                      : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
-                  }`}
-                  title="Divisão (/)"
-                >
-                  ÷
-                </button>
-
-                {/* Linha 3: 4, 5, 6, Multiplicação (*) */}
-                {['4', '5', '6'].map((digit) => (
                   <button
-                    key={digit}
                     type="button"
-                    onClick={() => handleInput(digit)}
+                    onClick={() => handleInput('.')}
                     className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                      activeKey === digit
+                      activeKey === '.' || activeKey === ','
                         ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
                         : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
                     }`}
+                    title="Ponto decimal (.)"
                   >
-                    {digit}
+                    .
                   </button>
-                ))}
 
-                <button
-                  type="button"
-                  onClick={() => handleInput('*')}
-                  className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                    activeKey === '*'
-                      ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
-                      : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
-                  }`}
-                  title="Multiplicação (*)"
-                >
-                  ×
-                </button>
-
-                {/* Linha 4: 1, 2, 3, Subtração (-) */}
-                {['1', '2', '3'].map((digit) => (
                   <button
-                    key={digit}
                     type="button"
-                    onClick={() => handleInput(digit)}
-                    className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                      activeKey === digit
-                        ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
-                        : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
+                    onClick={() => handleCalculate()}
+                    className={`py-3.5 rounded-xl font-mono text-lg font-bold transition-all shadow-md flex items-center justify-center border ${
+                      activeKey === 'Enter' || activeKey === '='
+                        ? 'bg-amber-400 text-slate-950 scale-95 shadow-amber-500/40 border-amber-300'
+                        : 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400/30 shadow-amber-500/20 hover:brightness-110 active:scale-95'
                     }`}
+                    title="Calcular resultado (Atalho: Enter ou =)"
                   >
-                    {digit}
+                    =
                   </button>
-                ))}
 
-                <button
-                  type="button"
-                  onClick={() => handleInput('-')}
-                  className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                    activeKey === '-'
-                      ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
-                      : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
-                  }`}
-                  title="Subtração (-)"
-                >
-                  −
-                </button>
-
-                {/* Linha 5: 0, Ponto (.), Igualdade (=), Soma (+) */}
-                <button
-                  type="button"
-                  onClick={() => handleInput('0')}
-                  className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                    activeKey === '0'
-                      ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
-                      : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
-                  }`}
-                >
-                  0
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleInput('.')}
-                  className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                    activeKey === '.' || activeKey === ','
-                      ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
-                      : 'bg-slate-800/70 text-slate-100 border-slate-700/40 hover:bg-slate-750 hover:border-slate-600 active:scale-95'
-                  }`}
-                  title="Ponto decimal (.)"
-                >
-                  .
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleCalculate()}
-                  className={`py-3.5 rounded-xl font-mono text-lg font-bold transition-all shadow-md flex items-center justify-center border ${
-                    activeKey === 'Enter' || activeKey === '='
-                      ? 'bg-amber-400 text-slate-950 scale-95 shadow-amber-500/40 border-amber-300'
-                      : 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400/30 shadow-amber-500/20 hover:brightness-110 active:scale-95'
-                  }`}
-                  title="Calcular resultado (Atalho: Enter ou =)"
-                >
-                  =
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleInput('+')}
-                  className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
-                    activeKey === '+'
-                      ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
-                      : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
-                  }`}
-                  title="Soma (+)"
-                >
-                  +
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInput('+')}
+                    className={`py-3.5 rounded-xl font-mono text-lg font-semibold transition-all border ${
+                      activeKey === '+'
+                        ? 'bg-amber-500 text-slate-950 scale-95 border-amber-400'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 active:scale-95'
+                    }`}
+                    title="Soma (+)"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
               {/* Guia discreto de atalhos físicos do teclado */}
@@ -586,67 +615,25 @@ export default function App() {
                   <span>Teclado físico ativo</span>
                 </span>
                 <div className="flex items-center gap-2 font-mono text-[10px]">
-                  <span><strong className="text-slate-300">Esc:</strong> Zerar tudo</span>
+                  <span><strong className="text-slate-300">Esc:</strong> AC</span>
                   <span>·</span>
                   <span><strong className="text-slate-300">⌫:</strong> Corrigir</span>
                   <span>·</span>
-                  <span><strong className="text-slate-300">Enter:</strong> Calcular</span>
+                  <span><strong className="text-slate-300">%:</strong> Porcento</span>
+                  <span>·</span>
+                  <span><strong className="text-slate-300">Enter:</strong> =</span>
                 </div>
               </div>
 
             </div>
           </div>
 
-          {/* Coluna Lateral: Critérios de Teste e/ou Histórico */}
+          {/* Coluna Lateral: Histórico (aberto por padrão) e/ou Critérios de Teste (fechado por padrão) */}
           <div className="w-full lg:col-span-5 space-y-4">
             
-            {/* Painel de Validação dos Critérios de Teste da Primeira Versão */}
-            {showTestPanel && (
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <h2 className="text-sm font-semibold text-slate-200">
-                      Critérios de Teste (v1)
-                    </h2>
-                  </div>
-                  <span className="text-[11px] text-slate-400">Clique para testar</span>
-                </div>
-
-                <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                  Casos de teste acordados na etapa de especificação: operações básicas, decimais, negativos e tratamento de erros.
-                </p>
-
-                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                  {CRITERIOS_DE_TESTE.map((item, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => loadTestCase(item.expr)}
-                      className="w-full text-left p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-amber-500/40 hover:bg-slate-800/40 transition-all group flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-mono text-sm font-semibold text-amber-300 group-hover:text-amber-200">
-                          {item.label}
-                        </span>
-                        <span className="text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-slate-800">
-                          {item.tag}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-xs text-slate-400 group-hover:text-slate-200 font-mono">
-                        <span>Esperado: {item.expected}</span>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Painel de Histórico de Cálculos */}
+            {/* Painel de Histórico de Cálculos (inicia aberto) */}
             {showHistory && (
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl animate-in fade-in duration-150">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <History className="w-4 h-4 text-slate-300" />
@@ -654,20 +641,30 @@ export default function App() {
                       Histórico Recente
                     </h2>
                   </div>
-                  {history.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    {history.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setHistory([])}
+                        className="text-[11px] text-rose-400 hover:text-rose-300 transition-colors"
+                      >
+                        Limpar
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setHistory([])}
-                      className="text-[11px] text-rose-400 hover:text-rose-300 transition-colors"
+                      onClick={() => setShowHistory(false)}
+                      className="text-xs text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded-md hover:bg-slate-800 transition-colors"
+                      title="Fechar histórico"
                     >
-                      Limpar histórico
+                      ✕ Fechar
                     </button>
-                  )}
+                  </div>
                 </div>
 
                 {history.length === 0 ? (
                   <div className="text-center py-8 text-xs text-slate-400 font-mono">
-                    Nenhum cálculo registrado ainda.
+                    Nenhum cálculo registrado ainda. Realize operações para visualizar aqui.
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
@@ -700,14 +697,68 @@ export default function App() {
               </div>
             )}
 
+            {/* Painel de Validação dos Critérios de Teste (inicia fechado) */}
+            {showTestPanel && (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl animate-in fade-in duration-150">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <h2 className="text-sm font-semibold text-slate-200">
+                      Critérios de Teste (v2)
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">Clique para testar</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowTestPanel(false)}
+                      className="text-xs text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded-md hover:bg-slate-800 transition-colors"
+                      title="Fechar critérios de teste"
+                    >
+                      ✕ Fechar
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                  Casos de teste rápidos: operações básicas, porcentagem (direta, valor, acréscimo e desconto), divisão por zero e sintaxe.
+                </p>
+
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {CRITERIOS_DE_TESTE.map((item, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => loadTestCase(item.expr)}
+                      className="w-full text-left p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-amber-500/40 hover:bg-slate-800/40 transition-all group flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono text-sm font-semibold text-amber-300 group-hover:text-amber-200">
+                          {item.label}
+                        </span>
+                        <span className="text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-slate-800">
+                          {item.tag}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 text-xs text-slate-400 group-hover:text-slate-200 font-mono">
+                        <span>Esperado: {item.expected}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Cartão Informativo de Arquitetura */}
             <div className="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-4 text-xs text-slate-400 space-y-2">
               <div className="flex items-center gap-2 text-slate-300 font-medium">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Tratamento Robusto de Erros Ativo</span>
+                <span>Tratamento Robusto de Erros e Porcentagem</span>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-400">
-                Divisões por zero e operadores malformados são interceptados de forma segura tanto no frontend quanto no módulo Python correspondente (<code className="text-amber-300 font-mono">calculator.py</code>).
+                Divisões por zero, operadores malformados e regras de porcentagem são validadas com segurança tanto no frontend quanto no módulo Python correspondente (<code className="text-amber-300 font-mono">calculator.py</code>).
               </p>
             </div>
 
@@ -739,15 +790,17 @@ export default function App() {
 
             <div className="p-4 sm:p-5 overflow-y-auto font-mono text-xs text-slate-300 bg-slate-950/90 leading-relaxed space-y-3">
               <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 text-[11px] text-slate-400 font-sans">
-                💡 Este módulo está salvo na raiz do projeto (<code className="text-amber-300 font-mono">/calculator.py</code>). Ele pode ser executado via terminal com <code className="text-emerald-300 font-mono">python3 calculator.py &quot;5+7&quot;</code> ou em modo interativo.
+                💡 Este módulo está salvo na raiz do projeto (<code className="text-amber-300 font-mono">/calculator.py</code>). Ele pode ser executado via terminal com <code className="text-emerald-300 font-mono">python3 calculator.py &quot;100+10%&quot;</code> ou em modo interativo.
               </div>
 
               <pre className="text-emerald-400/90 overflow-x-auto p-3 rounded-lg bg-black/40 border border-slate-800/60 font-mono">
-{`# Teste rápido no terminal:
-python3 calculator.py "10*2"      # Saída: 20
-python3 calculator.py "15/3"      # Saída: 5
-python3 calculator.py "10/0"      # Erro: Não é possível dividir por zero
-python3 calculator.py "5++2"      # Erro: operadores consecutivos não permitidos`}
+{`# Testes no terminal com as 4 operações básicas e porcentagem:
+python3 calculator.py "100+10%"    # Saída: 110 (acréscimo)
+python3 calculator.py "200-15%"    # Saída: 170 (desconto)
+python3 calculator.py "200*10%"    # Saída: 20  (porcentagem de valor)
+python3 calculator.py "50%"        # Saída: 0.5 (porcentagem direta)
+python3 calculator.py "10/0"       # Erro: Não é possível dividir por zero
+python3 calculator.py "50%%"       # Erro: operadores consecutivos não permitidos`}
               </pre>
 
               <div className="text-slate-400 pt-2 text-[11px] font-sans">
@@ -771,11 +824,13 @@ python3 calculator.py "5++2"      # Erro: operadores consecutivos não permitido
       {/* Rodapé Limpo */}
       <footer className="border-t border-slate-800/60 py-4 px-4 text-center text-xs text-slate-400">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Calculadora Web v1.0 · Operações Aritméticas Básicas</span>
+          <span>Calculadora Web v2.0 · Quatro Operações Básicas e Porcentagem</span>
           <div className="flex items-center gap-3 font-mono text-[11px]">
             <span>Backspace = Corrigir</span>
             <span>·</span>
-            <span>Esc = Zerar</span>
+            <span>Esc = AC</span>
+            <span>·</span>
+            <span>% = Porcentagem</span>
             <span>·</span>
             <span>Enter = Calcular</span>
           </div>

@@ -1,6 +1,6 @@
 {
   "name": "Calculadora Web",
-  "description": "Calculadora simples e intuitiva com operações matemáticas básicas e validações.",
+  "description": "Calculadora web simples e intuitiva com quatro operações matemáticas básicas, porcentagem e validações estritas.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

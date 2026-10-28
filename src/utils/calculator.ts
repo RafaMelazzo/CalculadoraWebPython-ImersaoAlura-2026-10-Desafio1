@@ -11,7 +11,7 @@ export interface CalculationResult {
 }
 
 /**
- * Valida e calcula expressões aritméticas com suporte a +, -, *, /
+ * Valida e calcula expressões aritméticas com suporte a +, -, *, /, %
  * Segue as mesmas regras e tratamento de erros do módulo Python calculator.py.
  */
 export function calculateExpression(rawExpression: string): CalculationResult {
@@ -31,23 +31,31 @@ export function calculateExpression(rawExpression: string): CalculationResult {
 
   const compact = sanitized.replace(/\s+/g, '');
 
-  // Validação de operadores consecutivos inválidos (ex: ++, --, +*, //, **, etc.)
-  if (/[\+\-\*/]{2,}/.test(compact)) {
+  // Validação de operadores consecutivos inválidos (ex: ++, --, +*, //, **, %%, etc.)
+  if (/[\+\-\*/]{2,}/.test(compact) || /%{2,}/.test(compact)) {
     return {
       success: false,
       error: 'Expressão inválida: operadores consecutivos não permitidos',
     };
   }
 
-  // Não pode iniciar com operador de multiplicação ou divisão
-  if (/^[*/]/.test(compact)) {
+  // Operadores aritméticos imediatamente seguidos de % (ex: +%, -%, *%, /%)
+  if (/[\+\-\*/]%/.test(compact)) {
     return {
       success: false,
-      error: 'Expressão inválida: não pode iniciar com multiplicação ou divisão',
+      error: 'Expressão inválida: operador seguido de porcentagem não permitido',
     };
   }
 
-  // Não pode terminar com operador aritmético pendente
+  // Não pode iniciar com operador de multiplicação, divisão ou porcentagem
+  if (/^[*/%]/.test(compact)) {
+    return {
+      success: false,
+      error: 'Expressão inválida: não pode iniciar com multiplicação, divisão ou porcentagem',
+    };
+  }
+
+  // Não pode terminar com operador aritmético pendente (+, -, *, /)
   if (/[\+\-\*/]$/.test(compact)) {
     return {
       success: false,
@@ -55,8 +63,8 @@ export function calculateExpression(rawExpression: string): CalculationResult {
     };
   }
 
-  // Permitir apenas caracteres matemáticos seguros: números, espaços, ponto e +, -, *, /, (, )
-  if (!/^[0-9\.\+\-\*/\(\)\s]+$/.test(sanitized)) {
+  // Permitir apenas caracteres matemáticos seguros: números, espaços, ponto e +, -, *, /, %, (, )
+  if (!/^[0-9\.\+\-\*/\(\)\s%]+$/.test(sanitized)) {
     return {
       success: false,
       error: 'Expressão inválida: contém caracteres não numéricos',
@@ -101,7 +109,7 @@ export function calculateExpression(rawExpression: string): CalculationResult {
 
 // Tokenizer & Parser AST seguro no cliente (sem eval)
 
-type TokenType = 'NUMBER' | 'OP' | 'LPAREN' | 'RPAREN';
+type TokenType = 'NUMBER' | 'OP' | 'PERCENT' | 'LPAREN' | 'RPAREN';
 
 interface Token {
   type: TokenType;
@@ -128,6 +136,12 @@ function tokenize(expr: string): Token[] {
 
     if (ch === ')') {
       tokens.push({ type: 'RPAREN', value: ')' });
+      i++;
+      continue;
+    }
+
+    if (ch === '%') {
+      tokens.push({ type: 'PERCENT', value: '%' });
       i++;
       continue;
     }
@@ -164,6 +178,7 @@ function tokenize(expr: string): Token[] {
 type Node =
   | { type: 'NUMBER'; value: number }
   | { type: 'UNARY'; op: '+' | '-'; operand: Node }
+  | { type: 'PERCENT'; operand: Node }
   | { type: 'BINARY'; op: '+' | '-' | '*' | '/'; left: Node; right: Node };
 
 function parseExpression(tokens: Token[]): Node {
@@ -221,37 +236,42 @@ function parseExpression(tokens: Token[]): Node {
     return node;
   }
 
-  // Fator: número, unário (-/+), parênteses
+  // Fator: número, unário (-/+), parênteses e porcentagem pós-fixada (%)
   function parseFactor(): Node {
     const token = peek();
     if (!token) {
       throw new Error('Expressão incompleta');
     }
 
+    let node: Node;
+
     // Operador unário: -5 ou +3
     if (token.type === 'OP' && (token.value === '-' || token.value === '+')) {
       const op = consume().value as '+' | '-';
       const operand = parseFactor();
-      return { type: 'UNARY', op, operand };
-    }
-
-    if (token.type === 'NUMBER') {
+      node = { type: 'UNARY', op, operand };
+    } else if (token.type === 'NUMBER') {
       consume();
       const num = parseFloat(token.value);
       if (Number.isNaN(num)) {
         throw new Error(`Número inválido: "${token.value}"`);
       }
-      return { type: 'NUMBER', value: num };
-    }
-
-    if (token.type === 'LPAREN') {
+      node = { type: 'NUMBER', value: num };
+    } else if (token.type === 'LPAREN') {
       consume('(');
-      const innerNode = parseAddSub();
+      node = parseAddSub();
       consume(')');
-      return innerNode;
+    } else {
+      throw new Error(`Símbolo inesperado: "${token.value}"`);
     }
 
-    throw new Error(`Símbolo inesperado: "${token.value}"`);
+    // Operador de porcentagem pós-fixado (%) aplicado ao fator
+    while (pos < tokens.length && peek()?.type === 'PERCENT') {
+      consume('%');
+      node = { type: 'PERCENT', operand: node };
+    }
+
+    return node;
   }
 
   const result = parseAddSub();
@@ -271,22 +291,40 @@ function evaluateAst(node: Node): number {
       return node.op === '-' ? -val : val;
     }
 
-    case 'BINARY': {
-      const left = evaluateAst(node.left);
-      const right = evaluateAst(node.right);
+    case 'PERCENT': {
+      return evaluateAst(node.operand) / 100;
+    }
 
+    case 'BINARY': {
       switch (node.op) {
-        case '+':
-          return left + right;
-        case '-':
-          return left - right;
-        case '*':
-          return left * right;
-        case '/':
+        case '+': {
+          // Acréscimo percentual comercial: A + B% = A + (A * (B / 100))
+          if (node.right.type === 'PERCENT' && node.left.type !== 'PERCENT') {
+            const leftVal = evaluateAst(node.left);
+            const pctVal = evaluateAst(node.right.operand) / 100;
+            return leftVal + (leftVal * pctVal);
+          }
+          return evaluateAst(node.left) + evaluateAst(node.right);
+        }
+        case '-': {
+          // Desconto percentual comercial: A - B% = A - (A * (B / 100))
+          if (node.right.type === 'PERCENT' && node.left.type !== 'PERCENT') {
+            const leftVal = evaluateAst(node.left);
+            const pctVal = evaluateAst(node.right.operand) / 100;
+            return leftVal - (leftVal * pctVal);
+          }
+          return evaluateAst(node.left) - evaluateAst(node.right);
+        }
+        case '*': {
+          return evaluateAst(node.left) * evaluateAst(node.right);
+        }
+        case '/': {
+          const right = evaluateAst(node.right);
           if (right === 0) {
             throw new Error('Não é possível dividir por zero');
           }
-          return left / right;
+          return evaluateAst(node.left) / right;
+        }
       }
     }
   }
