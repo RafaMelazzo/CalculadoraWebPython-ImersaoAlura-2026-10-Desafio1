@@ -1,6 +1,6 @@
 # 🧮 Calculadora Web & Engine Python
 
-> Aplicação de calculadora interativa com interface moderna em **React + TypeScript + Tailwind CSS** e motor matemático equivalente em **Python (AST)**, desenvolvida como parte da **Imersão Alura — Desafio 1**.
+> Aplicação de calculadora interativa com interface moderna em **React + TypeScript + Tailwind CSS** e motor matemático equivalente em **Python (AST)**, desenvolvida como parte da **Imersão Engenharia de Software: Dev na Era da IA**, aplicada por uma parceria entre a **Alura** e a **Google**.
 
 Suporta com precisão as quatro operações fundamentais da matemática e cálculo de porcentagem comercial, com validação estrita de sintaxe, proteção contra divisões por zero, histórico de cálculos, critérios de teste interativos e suporte completo a atalhos do teclado físico.
 
